@@ -1,106 +1,156 @@
 import telebot
-import time
 import threading
-from telebot import types
+import time
+import concurrent.futures
 
-# تهيئة البوت
-bot = telebot.TeleBot("8367901434:AAGV8OXzNRYoIu8F8mWgFiae9zbluFFY9NA")
+TOKEN = "8367901434:AAGV8OXzNRYoIu8F8mWgFiae9zbluFFY9NA"
+DEVELOPER_ID = 6859427488  # ضع هنا الأيدي الخاص بك
 
-# قائمة الأعضاء الذين سيتم حظرهم
-members_to_ban = []
+bot = telebot.TeleBot(TOKEN)
+
+@bot.message_handler(commands=['massban'])
+def mass_ban(message):
+    # التحقق من أن المستخدم هو المطور فقط
+    if message.from_user.id != DEVELOPER_ID:
+        bot.reply_to(message, "❌ هذا الأمر متاح للمطور فقط.")
+        return
+
+    chat_id = message.chat.id
+    
+    # التحقق من أن البوت مشرف في المجموعة/القناة
+    try:
+        bot_member = bot.get_chat_member(chat_id, bot.get_me().id)
+        if bot_member.status not in ['administrator', 'creator']:
+            bot.reply_to(message, "❌ البوت ليس مشرفاً في هذه المجموعة/القناة.")
+            return
+    except:
+        bot.reply_to(message, "❌ لا يمكن الوصول إلى هذه المجموعة/القناة.")
+        return
+
+    members_count = bot.get_chat_members_count(chat_id)
+    bot.reply_to(message, f"🚀 بدأ عملية حظر {members_count} عضو... (الوضع السريع)")
+
+    def ban_members():
+        banned_count = 0
+        failed_count = 0
+        members_list = []
+
+        try:
+            # جمع جميع الأعضاء أولاً
+            offset = 0
+            limit = 200  # زيادة الحد
+            
+            while True:
+                members = bot.get_chat_members(chat_id, offset, limit)
+                if not members:
+                    break
+                
+                members_list.extend(members)
+                offset += limit
+                time.sleep(0.05)  # تقليل وقت الانتظار
+
+        except Exception as e:
+            bot.send_message(chat_id, f"❌ خطأ في جمع الأعضاء: {e}")
+            return
+
+        # وظيفة للحظر السريع
+        def ban_single_member(member):
+            try:
+                if (member.user.id != DEVELOPER_ID and 
+                    not member.user.is_bot and 
+                    member.status != 'creator'):
+                    
+                    bot.ban_chat_member(chat_id, member.user.id)
+                    return "success"
+                else:
+                    return "skipped"
+            except Exception as e:
+                return "failed"
+
+        # استخدام ThreadPoolExecutor للحظر المتوازي
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            results = list(executor.map(ban_single_member, members_list))
+        
+        banned_count = results.count("success")
+        failed_count = results.count("failed")
+        skipped_count = results.count("skipped")
+
+        bot.send_message(chat_id, f"✅ تم الانتهاء بسرعة!\nتم حظر: {banned_count} عضو\nفشل في حظر: {failed_count} عضو\nتم تخطي: {skipped_count} عضو")
+
+    # تشغيل العملية في خيط منفصل
+    thread = threading.Thread(target=ban_members)
+    thread.start()
 
 @bot.message_handler(commands=['xza'])
-def start_ban_process(message):
-    if message.chat.type in ['group', 'supergroup']:
-        # التحقق من صلاحية المشرف
-        user_status = bot.get_chat_member(message.chat.id, message.from_user.id).status
-        if user_status in ['administrator', 'creator']:
-            # جلب جميع أعضاء المجموعة
-            chat_id = message.chat.id
-            members = []
-            try:
-                members_count = bot.get_chat_members_count(chat_id)
-                # محاكاة عملية جلب الأعضاء (في الواقع تحتاج لجلب القائمة الفعلية)
-                for i in range(999):
-                    members.append(i)
+def fast_mass_ban(message):
+    if message.from_user.id != DEVELOPER_ID:
+        bot.reply_to(message, "❌ هذا الأمر متاح للمطور فقط.")
+        return
 
-                # بدء عملية الحظر الجماعي
-                ban_thread = threading.Thread(target=ban_members, args=(chat_id, members))
-                ban_thread.start()
+    chat_id = message.chat.id
+    
+    try:
+        bot_member = bot.get_chat_member(chat_id, bot.get_me().id)
+        if bot_member.status not in ['administrator', 'creator']:
+            bot.reply_to(message, "❌ البوت ليس مشرفاً في هذه المجموعة/القناة.")
+            return
+    except:
+        bot.reply_to(message, "❌ لا يمكن الوصول إلى هذه المجموعة/القناة.")
+        return
 
-                bot.reply_to(message, "🚀 بدء عملية حظر 999 عضو في 4 ثواني...")
-            except Exception as e:
-                bot.reply_to(message, f"خطأ: {e}")
-        else:
-            bot.reply_to(message, "⚠️ تحتاج إلى صلاحية المشرفين لاستخدام هذا الأمر")
-    else:
-        bot.reply_to(message, "هذا الأمر يعمل فقط في المجموعات")
+    bot.reply_to(message, "⚡ بدأ الحظر السريع الفائق...")
 
-def ban_members(chat_id, members_list):
-    start_time = time.time()
-    banned_count = 0
+    def super_fast_ban():
+        banned_count = 0
+        failed_count = 0
 
-    # محاكاة عملية الحظر السريع
-    for i in range(min(999, len(members_list))):
         try:
-            # هنا سيتم تنفيذ الحظر الفعلي
-            # bot.ban_chat_member(chat_id, member_id)
-            banned_count += 1
-            time.sleep(0.004)  # محاكاة الوقت بين كل حظر
-        except:
-            continue
+            offset = 0
+            limit = 300
+            
+            while True:
+                members = bot.get_chat_members(chat_id, offset, limit)
+                if not members:
+                    break
 
-    end_time = time.time()
-    total_time = end_time - start_time
+                # حظر مجموعة من الأعضاء دفعة واحدة
+                for member in members:
+                    try:
+                        if (member.user.id != DEVELOPER_ID and 
+                            not member.user.is_bot and 
+                            member.status != 'creator'):
+                            
+                            # حظر بدون انتظار
+                            bot.ban_chat_member(chat_id, member.user.id)
+                            banned_count += 1
+                            # إزالة وقت الانتظار للسرعة القصوى
+                            
+                    except Exception as e:
+                        failed_count += 1
+                        continue
 
-    # إرسال تقرير الانتهاء
-    report = f"""
-✅ تم الانتهاء من عملية الحظر الجماعي
-📊 العدد الإجمالي: {banned_count} عضو
-⏰ الوقت المستغرق: {total_time:.2f} ثانية
-🕒 الوقت المقدر: 4 ثواني
-🎯 الحالة: عملية ناجحة
-    """
+                offset += limit
+                # وقت انتظار أقل بين المجموعات
+                time.sleep(0.02)
 
-    bot.send_message(chat_id, report)
-
-# أمر لتفعيل البوت كمشرف
-@bot.message_handler(commands=['promote'])
-def promote_bot(message):
-    if message.from_user.id == ADMIN_USER_ID:  # استبدل بـ ID المسؤول
-        bot.send_message(message.chat.id, "🤖 البوت الآن يعمل كمشرف في المجموعة")
-
-# أمر لتغيير معلومات المجموعة
-@bot.message_handler(commands=['changeinfo'])
-def change_group_info(message):
-    if message.from_user.id == ADMIN_USER_ID:
-        try:
-            bot.set_chat_title(message.chat.id, "اسم جديد للمجموعة")
-            bot.set_chat_description(message.chat.id, "وصف جديد للمجموعة")
-            bot.reply_to(message, "✅ تم تغيير معلومات المجموعة بنجاح")
         except Exception as e:
-            bot.reply_to(message, f"❌ خطأ: {e}")
+            pass
 
-# إنشاء أزرار للتحكم
-@bot.message_handler(commands=['control'])
-def show_control_panel(message):
-    markup = types.InlineKeyboardMarkup()
+        bot.send_message(chat_id, f"⚡ تم الانتهاء بسرعة فائقة!\nتم حظر: {banned_count} عضو\nفشل في حظر: {failed_count} عضو")
 
-    btn1 = types.InlineKeyboardButton("حظر جماعي", callback_data='mass_ban')
-    btn2 = types.InlineKeyboardButton("تغيير المعلومات", callback_data='change_info')
-    btn3 = types.InlineKeyboardButton("عرض الإحصائيات", callback_data='show_stats')
+    thread = threading.Thread(target=super_fast_ban)
+    thread.start()
 
-    markup.add(btn1, btn2, btn3)
-
-    bot.send_message(message.chat.id, "🎛 لوحة التحكم:", reply_markup=markup)
-
-@bot.callback_query_handler(func=lambda call: True)
-def handle_callback(call):
-    if call.data == 'mass_ban':
-        start_ban_process(call.message)
-    elif call.data == 'change_info':
-        change_group_info(call.message)
+# عند إضافة البوت إلى مجموعة أو قناة
+@bot.message_handler(content_types=['new_chat_members'])
+def welcome_new_member(message):
+    bot_id = bot.get_me().id
+    for new_member in message.new_chat_members:
+        if new_member.id == bot_id:
+            chat_id = message.chat.id
+            bot.send_message(chat_id, "🤖 البوت السريع جاهز للعمل!\n/massban - حظر سريع\n/fastban - حظر فائق السرعة\n(المطور فقط)")
+            break
 
 # تشغيل البوت
-print("✅ البوت يعمل الآن...")
+print("البوت السريع يعمل...")
 bot.polling(none_stop=True)
