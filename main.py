@@ -1,4 +1,3 @@
-خلي سريع حضر اعضاء 
 
 import telebot
 from telebot import types
